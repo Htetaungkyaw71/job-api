@@ -1,0 +1,274 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
+// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
+
+generator client {
+  provider = "prisma-client"
+  output   = "../generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model Job {
+  id          Int      @id @default(autoincrement())
+  title       String
+  description String
+  location    String
+  isRemote    Boolean @default(false)
+
+  salaryMin Int?
+  salaryMax Int?
+
+  techStack String[]
+  level     JobLevel
+  type      JobType
+
+  createdAt DateTime @default(now())
+  expiresAt DateTime?
+
+  companyId Int
+  company   Company @relation(fields: [companyId], references: [id])
+
+  postedById Int
+  postedBy   User @relation("PostedJobs", fields: [postedById], references: [id])
+  applications Application[]
+
+}
+
+
+
+
+
+model Application {
+  id        Int      @id @default(autoincrement())
+  status    ApplicationStatus @default(APPLIED)
+  createdAt DateTime @default(now())
+
+  jobId Int
+  job   Job @relation(fields: [jobId], references: [id])
+
+  userId Int
+  user   User @relation(fields: [userId], references: [id])
+
+  @@unique([jobId, userId])
+}
+
+model User {
+  id        Int      @id @default(autoincrement())
+  email     String   @unique
+  password  String
+  role      Role     @default(CANDIDATE)
+  createdAt DateTime @default(now())
+
+  candidateProfile CandidateProfile?
+  recruiterProfile RecruiterProfile?
+  company          Company?
+
+  jobsPosted       Job[]          @relation("PostedJobs")
+  applications     Application[]
+}
+
+/* =========================
+   CANDIDATE PROFILE
+========================= */
+
+model CandidateProfile {
+  id          Int      @id @default(autoincrement())
+  headline    String?
+  description String?
+
+  location     String?
+  openToRemote Boolean @default(true)
+
+  expectedSalary Int?
+
+  availability Availability
+  jobStatus    JobStatus
+
+  visibility   ProfileVisibility @default(RECRUITERS_ONLY)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  userId Int  @unique
+  user   User @relation(fields: [userId], references: [id])
+
+  skills      Skill[]
+  languages   Language[]
+  experiences Experience[]
+}
+
+/* =========================
+   RECRUITER PROFILE
+========================= */
+
+model RecruiterProfile {
+  id          Int      @id @default(autoincrement())
+  fullName    String
+  title       String      // HR Manager, Tech Recruiter
+  email       String
+  phone       String?
+  linkedinUrl String?
+
+  createdAt DateTime @default(now())
+
+  userId Int  @unique
+  user   User @relation(fields: [userId], references: [id])
+
+  companyId Int
+  company   Company @relation(fields: [companyId], references: [id])
+}
+
+enum Role {
+  ADMIN
+  RECRUITER
+  CANDIDATE
+}
+
+
+/* =========================
+   SKILLS
+========================= */
+
+model Skill {
+  id        Int        @id @default(autoincrement())
+  name      String
+  level     SkillLevel
+
+  profileId Int
+  profile   CandidateProfile @relation(fields: [profileId], references: [id])
+}
+
+/* =========================
+   LANGUAGES
+========================= */
+
+model Language {
+  id        Int           @id @default(autoincrement())
+  name      String
+  level     LanguageLevel
+
+  profileId Int
+  profile   CandidateProfile @relation(fields: [profileId], references: [id])
+}
+
+/* =========================
+   WORK EXPERIENCE
+========================= */
+
+model Experience {
+  id          Int      @id @default(autoincrement())
+  companyName String
+  role        String
+  description String?
+  startDate   DateTime
+  endDate     DateTime?
+  isCurrent   Boolean @default(false)
+
+  profileId Int
+  profile   CandidateProfile @relation(fields: [profileId], references: [id])
+}
+
+
+/* =========================
+   COMPANY
+========================= */
+
+model Company {
+  id          Int      @id @default(autoincrement())
+  name        String
+  description String
+  website     String?
+  industry    String
+  size        CompanySize
+  foundedYear Int?
+  location    String
+
+  hiringStatus HiringStatus
+  verified     Boolean @default(false)
+
+  createdAt DateTime @default(now())
+
+  ownerId Int   @unique
+  owner   User  @relation(fields: [ownerId], references: [id])
+
+  recruiters RecruiterProfile[]
+  jobs       Job[]
+}
+
+
+
+
+enum Availability {
+  IMMEDIATE
+  TWO_WEEKS
+  ONE_MONTH
+  NEGOTIABLE
+}
+
+enum JobStatus {
+  ACTIVELY_LOOKING
+  OPEN_TO_OFFERS
+  NOT_LOOKING
+}
+
+enum ProfileVisibility {
+  PUBLIC
+  RECRUITERS_ONLY
+  PRIVATE
+}
+
+enum SkillLevel {
+  BEGINNER
+  INTERMEDIATE
+  ADVANCED
+  EXPERT
+}
+
+enum LanguageLevel {
+  BASIC
+  CONVERSATIONAL
+  FLUENT
+  NATIVE
+}
+
+enum CompanySize {
+  STARTUP
+  SMALL
+  MEDIUM
+  LARGE
+  ENTERPRISE
+}
+
+enum HiringStatus {
+  ACTIVELY_HIRING
+  LIMITED_HIRING
+  NOT_HIRING
+}
+
+
+enum JobLevel {
+  JUNIOR
+  MID
+  SENIOR
+  LEAD
+}
+
+enum JobType {
+  FULL_TIME
+  PART_TIME
+  CONTRACT
+  FREELANCE
+}
+
+enum ApplicationStatus {
+  APPLIED
+  SHORTLISTED
+  INTERVIEW
+  OFFER
+  REJECTED
+}
