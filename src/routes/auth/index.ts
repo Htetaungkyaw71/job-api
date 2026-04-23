@@ -1,10 +1,13 @@
 import { Router } from "express";
-import { prisma } from "../../../lib/prisma";
+import { prisma } from "../../../lib/prisma.js";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import rateLimit from "express-rate-limit";
-import { createUserSchema, loginUserSchema } from "../../validation/job.schema";
-import { validate } from "../../validation/validate";
+import {
+  createUserSchema,
+  loginUserSchema,
+} from "../../validation/job.schema.js";
+import { validate } from "../../validation/validate.js";
 
 const router = Router();
 

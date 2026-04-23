@@ -1,14 +1,14 @@
 import { Router } from "express";
 import type { Request, Response } from "express";
-import { prisma } from "../../../lib/prisma";
-import { validate } from "../../validation/validate";
-import { verifyToken } from "../../middlewares/authMiddleware";
+import { prisma } from "../../../lib/prisma.js";
+import { validate } from "../../validation/validate.js";
+import { verifyToken } from "../../middlewares/authMiddleware.js";
 import {
   createRecuriterSchema,
   updateRecuriterSchema,
-} from "../../validation/recuriter.schema";
-import { allowRoles } from "../../middlewares/allowRole";
-import { Role } from "../../../generated/prisma/enums";
+} from "../../validation/recuriter.schema.js";
+import { allowRoles } from "../../middlewares/allowRole.js";
+import { Role } from "../../../generated/prisma/enums.js";
 
 const router = Router();
 

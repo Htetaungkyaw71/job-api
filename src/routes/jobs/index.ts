@@ -1,6 +1,6 @@
 import type { Request, Response } from "express";
 import { Router } from "express";
-import { prisma } from "../../../lib/prisma";
+import { prisma } from "../../../lib/prisma.js";
 import { validate, validateParams } from "../../validation/validate.js";
 import {
   createJobSchema,
@@ -36,7 +36,7 @@ async function purgeExpiredJobs() {
     return;
   }
 
-  const expiredJobIds = expiredJobs.map((job: { id: string }) => job.id);
+  const expiredJobIds = expiredJobs.map((job) => job.id);
 
   await prisma.$transaction([
     prisma.application.deleteMany({
