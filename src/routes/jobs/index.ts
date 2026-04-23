@@ -1,120 +1,239 @@
-import { Request, Response, Router } from "express";
+import type { Request, Response } from "express";
+import { Router } from "express";
 import { prisma } from "../../../lib/prisma";
-import { validate, validateParams } from "../../validation/validate";
-import { createJobSchema, updateJobSchema } from "../../validation/job.schema";
-import { verifyToken } from "../../middlewares/authMiddleware";
-import { allowRoles } from "../../middlewares/allowRole";
-import { Role } from "../../../generated/prisma/enums";
+import { validate, validateParams } from "../../validation/validate.js";
+import {
+  createJobSchema,
+  jobIdSchema,
+  updateJobSchema,
+} from "../../validation/job.schema.js";
+import { verifyToken } from "../../middlewares/authMiddleware.js";
+import { allowRoles } from "../../middlewares/allowRole.js";
+import { Role } from "../../../generated/prisma/enums.js";
+import { JobLevel, JobType } from "../../../generated/prisma/enums.js";
 
 const router = Router();
 
-/**
- * @swagger
- * /jobs:
- *   get:
- *     summary: Get all jobs
- *     description: Public endpoint to fetch all job listings.
- *     tags:
- *       - Jobs
- *     responses:
- *       200:
- *         description: List of jobs
- *         content:
- *           application/json:
- *             schema:
- *               type: array
- *               items:
- *                 $ref: '#/components/schemas/Job'
- *       500:
- *         description: Server error
- */
+const ONE_MONTH_IN_MS = 30 * 24 * 60 * 60 * 1000;
+
+function getDefaultExpiresAt() {
+  return new Date(Date.now() + ONE_MONTH_IN_MS);
+}
+
+async function purgeExpiredJobs() {
+  const expiredJobs = await prisma.job.findMany({
+    where: {
+      expiresAt: {
+        lt: new Date(),
+      },
+    },
+    select: {
+      id: true,
+    },
+  });
+
+  if (expiredJobs.length === 0) {
+    return;
+  }
+
+  const expiredJobIds = expiredJobs.map((job) => job.id);
+
+  await prisma.$transaction([
+    prisma.application.deleteMany({
+      where: {
+        jobId: {
+          in: expiredJobIds,
+        },
+      },
+    }),
+    prisma.job.deleteMany({
+      where: {
+        id: {
+          in: expiredJobIds,
+        },
+      },
+    }),
+  ]);
+}
 
 router.get("/", async (req: Request, res: Response) => {
   try {
-    const jobs = await prisma.job.findMany({});
-    res.status(200).json(jobs);
-  } catch (error) {
-    console.log(error);
-    res.status(500).send("Something went wrong");
-  }
-});
+    await purgeExpiredJobs();
 
-/**
- * @swagger
- * /jobs/{id}:
- *   get:
- *     summary: Get job details
- *     description: Fetch job details by job ID.
- *     tags:
- *       - Jobs
- *     parameters:
- *       - in: path
- *         name: id
- *         required: true
- *         schema:
- *           type: number
- *     responses:
- *       200:
- *         description: Job details retrieved successfully
- *         content:
- *           application/json:
- *             schema:
- *               $ref: '#/components/schemas/Job'
- *       403:
- *         description: Job not found
- *       500:
- *         description: Server error
- */
+    const firstQueryValue = (
+      value: string | string[] | undefined,
+    ): string | undefined => (Array.isArray(value) ? value[0] : value);
 
-router.get("/:id", validateParams, async (req: Request, res: Response) => {
-  const id = +req.params.id;
-  try {
-    const jobDetail = await prisma.job.findFirst({
-      where: {
-        id: id,
+    const pageRaw = req.query.page;
+    const limitRaw = req.query.limit;
+    const typeRaw = req.query.type;
+    const levelRaw = req.query.level;
+    const isRemoteRaw = req.query.isRemote;
+    const minSalaryRaw = req.query.minSalary;
+    const searchRaw = req.query.search;
+    const techRaw = req.query.tech;
+    const sortRaw = req.query.sort;
+
+    const page = Math.max(1, Number(pageRaw) || 1);
+    const limit = Math.min(100, Math.max(1, Number(limitRaw) || 10));
+    const skip = (page - 1) * limit;
+
+    const type = firstQueryValue(typeRaw as string | string[] | undefined);
+    const level = firstQueryValue(levelRaw as string | string[] | undefined);
+    const isRemoteStr = firstQueryValue(
+      isRemoteRaw as string | string[] | undefined,
+    );
+    const minSalaryValue = Number(
+      firstQueryValue(minSalaryRaw as string | string[] | undefined),
+    );
+    const search =
+      firstQueryValue(searchRaw as string | string[] | undefined) || "";
+    const sort =
+      firstQueryValue(sortRaw as string | string[] | undefined) || "newest";
+
+    const techValues = (
+      firstQueryValue(techRaw as string | string[] | undefined) || ""
+    )
+      .split(",")
+      .map((value) => value.trim())
+      .filter(Boolean);
+
+    const normalizedTechValues = techValues.map((value) => value.toLowerCase());
+
+    const where: any = {};
+
+    if (type && Object.values(JobType).includes(type as JobType)) {
+      where.type = type;
+    }
+
+    if (level && Object.values(JobLevel).includes(level as JobLevel)) {
+      where.level = level;
+    }
+
+    if (isRemoteStr === "true" || isRemoteStr === "false") {
+      where.isRemote = isRemoteStr === "true";
+    }
+
+    if (!isNaN(minSalaryValue) && minSalaryValue >= 0) {
+      // Only include jobs whose minimum salary meets the requested threshold.
+      where.salaryMin = { gte: minSalaryValue };
+    }
+
+    if (search.trim()) {
+      where.OR = [
+        { title: { contains: search, mode: "insensitive" } },
+        { location: { contains: search, mode: "insensitive" } },
+        { description: { contains: search, mode: "insensitive" } },
+        { company: { name: { contains: search, mode: "insensitive" } } },
+      ];
+    }
+
+    const orderBy =
+      sort === "salary"
+        ? { salaryMax: "desc" as const }
+        : { createdAt: "desc" as const };
+
+    const hasPaginationQuery =
+      req.query.page !== undefined || req.query.limit !== undefined;
+
+    const matchesTechStack = (jobTechStack: string[] | undefined) => {
+      if (normalizedTechValues.length === 0) return true;
+
+      const jobTechValues = (jobTechStack || []).map((value) =>
+        value.toLowerCase(),
+      );
+
+      return normalizedTechValues.some((techValue) =>
+        jobTechValues.some((jobTechValue) => jobTechValue === techValue),
+      );
+    };
+
+    const applyTechFilter = <T extends { techStack: string[] }>(jobs: T[]) =>
+      jobs.filter((job) => matchesTechStack(job.techStack));
+
+    if (!hasPaginationQuery) {
+      const jobs = await prisma.job.findMany({
+        where,
+        orderBy,
+        include: {
+          company: {
+            select: {
+              name: true,
+              location: true,
+              website: true,
+              industry: true,
+            },
+          },
+        },
+      });
+
+      return res.status(200).json(applyTechFilter(jobs));
+    }
+
+    const jobs = await prisma.job.findMany({
+      where,
+      orderBy,
+      include: {
+        company: {
+          select: {
+            name: true,
+            location: true,
+            website: true,
+            industry: true,
+          },
+        },
       },
     });
-    if (!jobDetail) {
-      res.status(403).send("Job is not found");
-      return;
-    }
-    res.status(200).json(jobDetail);
+
+    const filteredJobs = applyTechFilter(jobs);
+    const total = filteredJobs.length;
+    const totalPages = Math.max(1, Math.ceil(total / limit));
+    const paginatedJobs = filteredJobs.slice(skip, skip + limit);
+
+    return res.status(200).json({
+      data: paginatedJobs,
+      pagination: {
+        page,
+        limit,
+        total,
+        totalPages,
+        hasNextPage: page < totalPages,
+        hasPrevPage: page > 1,
+      },
+    });
   } catch (error) {
     console.log(error);
     res.status(500).send("Something went wrong");
   }
 });
 
-/**
- * @swagger
- * /jobs:
- *   post:
- *     summary: Create job
- *     description: >
- *       Create a new job posting.
- *       Only RECRUITER or ADMIN can create jobs.
- *     tags:
- *       - Jobs
- *     security:
- *       - bearerAuth: []
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             $ref: '#/components/schemas/CreateJobRequest'
- *     responses:
- *       200:
- *         description: Job created successfully
- *         content:
- *           application/json:
- *             schema:
- *               $ref: '#/components/schemas/Job'
- *       403:
- *         description: Only recruiters can post jobs
- *       500:
- *         description: Server error
- */
+router.get(
+  "/:id",
+  validateParams(jobIdSchema),
+  async (req: Request, res: Response) => {
+    const id = String(req.params.id);
+    console.log(id);
+    try {
+      await purgeExpiredJobs();
+
+      const jobDetail = await prisma.job.findFirst({
+        where: {
+          id: id,
+          OR: [{ expiresAt: null }, { expiresAt: { gte: new Date() } }],
+        },
+        include: { company: true },
+      });
+      if (!jobDetail) {
+        res.status(403).send("Job is not found");
+        return;
+      }
+      res.status(200).json(jobDetail);
+    } catch (error) {
+      console.log(error);
+      res.status(500).send("Something went wrong");
+    }
+  },
+);
 
 router.post(
   "/",
@@ -127,8 +246,11 @@ router.post(
     if (req.role !== "RECRUITER") {
       return res.status(403).json({ message: "Only recruiters can post jobs" });
     }
-    const uid =
-      typeof req.user_id === "string" ? parseInt(req.user_id) : req.user_id;
+    const uid = req.user_id;
+    if (!uid) {
+      return res.status(401).json({ message: "Unauthorized" });
+    }
+    console.log("uid", uid);
 
     // 2. Get recruiter profile + company
     const recruiter = await prisma.recruiterProfile.findUnique({
@@ -138,12 +260,14 @@ router.post(
       select: { companyId: true },
     });
 
+    console.log(recruiter);
     try {
       const job = await prisma.job.create({
         data: {
           ...data,
           postedById: uid,
           companyId: recruiter?.companyId,
+          expiresAt: getDefaultExpiresAt(),
         },
       });
       res.status(200).json(job);
@@ -154,54 +278,24 @@ router.post(
   },
 );
 
-/**
- * @swagger
- * /jobs/{id}:
- *   put:
- *     summary: Update job
- *     description: Update an existing job posting.
- *     tags:
- *       - Jobs
- *     security:
- *       - bearerAuth: []
- *     parameters:
- *       - in: path
- *         name: id
- *         required: true
- *         schema:
- *           type: number
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             $ref: '#/components/schemas/UpdateJobRequest'
- *     responses:
- *       201:
- *         description: Job updated successfully
- *       403:
- *         description: Job not found or access denied
- *       500:
- *         description: Server error
- */
-
 router.put(
   "/:id",
   verifyToken,
   allowRoles(Role.RECRUITER, Role.ADMIN),
   validate(updateJobSchema),
-  validateParams,
+  validateParams(jobIdSchema),
   async (req: Request, res: Response) => {
-    const jobId = Number(req.params.id);
-    const uid =
-      typeof req.user_id === "string" ? Number(req.user_id) : req.user_id;
+    const jobId = String(req.params.id);
+    const uid = req.user_id;
 
     try {
       // 🔑 ADMIN can update any job
       const whereCondition =
         req.role === Role.ADMIN
           ? { id: jobId }
-          : { id: jobId, postedById: uid };
+          : uid
+            ? { id: jobId, postedById: uid }
+            : { id: jobId, postedById: "" };
 
       const job = await prisma.job.findFirst({
         where: whereCondition,
@@ -261,47 +355,23 @@ router.put(
 //   },
 // );
 
-/**
- * @swagger
- * /jobs/{id}:
- *   delete:
- *     summary: Delete job
- *     description: Delete a job posting.
- *     tags:
- *       - Jobs
- *     security:
- *       - bearerAuth: []
- *     parameters:
- *       - in: path
- *         name: id
- *         required: true
- *         schema:
- *           type: number
- *     responses:
- *       201:
- *         description: Job deleted successfully
- *       403:
- *         description: Job not found or access denied
- *       500:
- *         description: Server error
- */
-
 router.delete(
   "/:id",
   verifyToken,
   allowRoles(Role.RECRUITER, Role.ADMIN),
-  validateParams,
+  validateParams(jobIdSchema),
   async (req: Request, res: Response) => {
-    const jobId = Number(req.params.id);
-    const uid =
-      typeof req.user_id === "string" ? Number(req.user_id) : req.user_id;
+    const jobId = String(req.params.id);
+    const uid = req.user_id;
 
     try {
       // 🔑 ADMIN can delete any job
       const whereCondition =
         req.role === Role.ADMIN
           ? { id: jobId }
-          : { id: jobId, postedById: uid };
+          : uid
+            ? { id: jobId, postedById: uid }
+            : { id: jobId, postedById: "" };
 
       const job = await prisma.job.findFirst({
         where: whereCondition,
@@ -314,7 +384,7 @@ router.delete(
       }
 
       await prisma.job.delete({
-        where: { id: job.id },
+        where: { id: job?.id },
       });
 
       res.status(204).send(); // best practice
@@ -356,49 +426,3 @@ router.delete(
 // );
 
 export default router;
-
-/**
- * @swagger
- * components:
- *   schemas:
- *     Job:
- *       type: object
- *       properties:
- *         id:
- *           type: number
- *         title:
- *           type: string
- *           example: Frontend Developer
- *         description:
- *           type: string
- *         salary:
- *           type: number
- *         location:
- *           type: string
- *         companyId:
- *           type: number
- *         postedById:
- *           type: number
- *         createdAt:
- *           type: string
- *           format: date-time
- *
- *     CreateJobRequest:
- *       type: object
- *       required:
- *         - title
- *         - description
- *       properties:
- *         title:
- *           type: string
- *         description:
- *           type: string
- *         salary:
- *           type: number
- *         location:
- *           type: string
- *
- *     UpdateJobRequest:
- *       allOf:
- *         - $ref: '#/components/schemas/CreateJobRequest'
- */

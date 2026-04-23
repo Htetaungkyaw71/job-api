@@ -14,11 +14,16 @@ datasource db {
 }
 
 model Job {
-  id          Int      @id @default(autoincrement())
+  id          String   @id @default(uuid())
   title       String
   description String
   location    String
   isRemote    Boolean @default(false)
+  externalJob Boolean @default(false)
+  company_name String?
+  salary String?
+  applyLink   String?
+  logo        String?
 
   salaryMin Int?
   salaryMax Int?
@@ -30,10 +35,10 @@ model Job {
   createdAt DateTime @default(now())
   expiresAt DateTime?
 
-  companyId Int
+  companyId String
   company   Company @relation(fields: [companyId], references: [id])
 
-  postedById Int
+  postedById String
   postedBy   User @relation("PostedJobs", fields: [postedById], references: [id])
   applications Application[]
 
@@ -44,21 +49,24 @@ model Job {
 
 
 model Application {
-  id        Int      @id @default(autoincrement())
+  id        String   @id @default(uuid())
   status    ApplicationStatus @default(APPLIED)
+  name      String?
+  email     String?
+  cv_url    String?
   createdAt DateTime @default(now())
 
-  jobId Int
+  jobId String
   job   Job @relation(fields: [jobId], references: [id])
 
-  userId Int
+  userId String
   user   User @relation(fields: [userId], references: [id])
 
   @@unique([jobId, userId])
 }
 
 model User {
-  id        Int      @id @default(autoincrement())
+  id        String   @id @default(uuid())
   email     String   @unique
   password  String
   role      Role     @default(CANDIDATE)
@@ -77,7 +85,7 @@ model User {
 ========================= */
 
 model CandidateProfile {
-  id          Int      @id @default(autoincrement())
+  id          String   @id @default(uuid())
   headline    String?
   description String?
 
@@ -94,7 +102,7 @@ model CandidateProfile {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  userId Int  @unique
+  userId String  @unique
   user   User @relation(fields: [userId], references: [id])
 
   skills      Skill[]
@@ -107,7 +115,7 @@ model CandidateProfile {
 ========================= */
 
 model RecruiterProfile {
-  id          Int      @id @default(autoincrement())
+  id          String   @id @default(uuid())
   fullName    String
   title       String      // HR Manager, Tech Recruiter
   email       String
@@ -116,10 +124,10 @@ model RecruiterProfile {
 
   createdAt DateTime @default(now())
 
-  userId Int  @unique
+  userId String  @unique
   user   User @relation(fields: [userId], references: [id])
 
-  companyId Int
+  companyId String
   company   Company @relation(fields: [companyId], references: [id])
 }
 
@@ -135,11 +143,11 @@ enum Role {
 ========================= */
 
 model Skill {
-  id        Int        @id @default(autoincrement())
+  id        String     @id @default(uuid())
   name      String
   level     SkillLevel
 
-  profileId Int
+  profileId String
   profile   CandidateProfile @relation(fields: [profileId], references: [id])
 }
 
@@ -148,11 +156,11 @@ model Skill {
 ========================= */
 
 model Language {
-  id        Int           @id @default(autoincrement())
+  id        String        @id @default(uuid())
   name      String
   level     LanguageLevel
 
-  profileId Int
+  profileId String
   profile   CandidateProfile @relation(fields: [profileId], references: [id])
 }
 
@@ -161,7 +169,7 @@ model Language {
 ========================= */
 
 model Experience {
-  id          Int      @id @default(autoincrement())
+  id          String   @id @default(uuid())
   companyName String
   role        String
   description String?
@@ -169,7 +177,7 @@ model Experience {
   endDate     DateTime?
   isCurrent   Boolean @default(false)
 
-  profileId Int
+  profileId String
   profile   CandidateProfile @relation(fields: [profileId], references: [id])
 }
 
@@ -179,7 +187,7 @@ model Experience {
 ========================= */
 
 model Company {
-  id          Int      @id @default(autoincrement())
+  id          String   @id @default(uuid())
   name        String
   description String
   website     String?
@@ -193,7 +201,7 @@ model Company {
 
   createdAt DateTime @default(now())
 
-  ownerId Int   @unique
+  ownerId String   @unique
   owner   User  @relation(fields: [ownerId], references: [id])
 
   recruiters RecruiterProfile[]
@@ -267,7 +275,6 @@ enum JobType {
 
 enum ApplicationStatus {
   APPLIED
-  SHORTLISTED
   INTERVIEW
   OFFER
   REJECTED

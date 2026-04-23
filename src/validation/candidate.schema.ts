@@ -111,3 +111,11 @@ export const createCandidateSchema = z.object({
 });
 
 export const updateCandidateSchema = createCandidateSchema.partial();
+
+export const updateCandidateListsSchema = z
+  .object({
+    skills: z.array(skillSchema).optional(),
+    languages: z.array(languageSchema).optional(),
+    experiences: z.array(experienceSchema).optional(),
+  })
+  .partial();

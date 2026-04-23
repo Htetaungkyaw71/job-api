@@ -33,6 +33,9 @@ export const createJobSchema = z.object({
   salaryMax: priceSchema,
   techStack: z.array(z.string()),
   isRemote: z.boolean(),
+  externalJob: z.boolean().optional(),
+  applyLink: z.string().url("applyLink must be a valid URL").optional(),
+  logo: z.string().url("logo must be a valid URL").optional(),
   level: z.enum(["JUNIOR", "MID", "SENIOR", "LEAD"]),
   type: z.enum(["FULL_TIME", "PART_TIME", "CONTRACT", "FREELANCE"]),
 });
@@ -49,11 +52,12 @@ export const loginUserSchema = z.object({
 });
 
 export const createApplicationSchema = z.object({
-  jobId: z.int(),
+  jobId: z.uuid(),
+  name: z.string().min(2, "name must be at least 2 characters"),
+  email: z.email(),
+  cv_url: z.url("cv_url must be a valid URL"),
 
-  status: z
-    .enum(["APPLIED", "SHORTLISTED", "INTERVIEW", "OFFER", "REJECTED"])
-    .optional(),
+  status: z.enum(["APPLIED", "INTERVIEW", "OFFER", "REJECTED"]).optional(),
 });
 
 /**
@@ -65,5 +69,5 @@ export const updateJobSchema = createJobSchema.partial();
  * Params validation (id)
  */
 export const jobIdSchema = z.object({
-  id: z.coerce.number().int().positive(),
+  id: z.uuid(),
 });

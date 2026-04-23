@@ -1,60 +1,64 @@
-import { Request, Response, Router } from "express";
-import { prisma } from "../../../lib/prisma";
-import { validate, validateParams } from "../../validation/validate";
-import { verifyToken } from "../../middlewares/authMiddleware";
+import { Router } from "express";
+import type { Request, Response } from "express";
+import { prisma } from "../../../lib/prisma.js";
+import { validate, validateParams } from "../../validation/validate.js";
+import { verifyToken } from "../../middlewares/authMiddleware.js";
 
-import { createApplicationSchema } from "../../validation/job.schema";
-import { allowRoles } from "../../middlewares/allowRole";
-import { Role } from "../../../generated/prisma/enums";
+import {
+  createApplicationSchema,
+  jobIdSchema,
+} from "../../validation/job.schema.js";
+import { allowRoles } from "../../middlewares/allowRole.js";
+import { Role } from "../../../generated/prisma/enums.js";
 
 const router = Router();
 
-// Recuriter see application ->
+router.get(
+  "/me",
+  verifyToken,
+  allowRoles(Role.CANDIDATE, Role.ADMIN),
+  async (req: Request, res: Response) => {
+    try {
+      const applications = await prisma.application.findMany({
+        where: {
+          userId: req.user_id || "",
+        },
+        include: {
+          job: {
+            include: {
+              company: true,
+            },
+          },
+        },
+        orderBy: {
+          createdAt: "desc",
+        },
+      });
 
-/**
- * @swagger
- * /application/{id}:
- *   get:
- *     summary: View job applications
- *     description: >
- *       Recruiter can view candidates who applied to a job they posted.
- *       Admin can view applications for any job.
- *     tags:
- *       - Applications
- *     security:
- *       - bearerAuth: []
- *     parameters:
- *       - in: path
- *         name: id
- *         required: true
- *         schema:
- *           type: integer
- *         description: Job ID
- *     responses:
- *       200:
- *         description: List of candidates who applied for the job
- *         content:
- *           application/json:
- *             schema:
- *               type: array
- *               items:
- *                 $ref: '#/components/schemas/ApplicationResponse'
- *       403:
- *         description: Access denied (role not allowed)
- *       404:
- *         description: Job not found or user is not the owner
- *       500:
- *         description: Server error
- */
+      res.status(200).json(applications);
+    } catch (error) {
+      console.log(error);
+      res.status(500).send("Something went wrong");
+    }
+  },
+);
+
+// Recuriter see application ->
 
 router.get(
   "/:id",
   verifyToken,
   allowRoles(Role.RECRUITER, Role.ADMIN),
-  // validateParams,
+  validateParams(jobIdSchema),
 
   async (req: Request, res: Response) => {
-    const jobId = +req.params.id;
+    const rawJobId = req.params.id;
+    const jobId = Array.isArray(rawJobId) ? rawJobId[0] : rawJobId;
+
+    if (!jobId) {
+      return res.status(400).json({ message: "Job id is required" });
+    }
+
     console.log("jonId", jobId);
     try {
       if (req.role === "CANDIDATE") {
@@ -68,7 +72,7 @@ router.get(
         const job = await prisma.job.findFirst({
           where: {
             id: jobId,
-            postedById: req.user_id,
+            postedById: req.user_id || "",
           },
           select: { id: true },
         });
@@ -105,38 +109,6 @@ router.get(
 );
 
 // candidate create applications
-/**
- * @swagger
- * /application:
- *   post:
- *     summary: Apply for a job
- *     description: Candidate applies for a job. Admin can also create applications.
- *     tags:
- *       - Applications
- *     security:
- *       - bearerAuth: []
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             $ref: '#/components/schemas/CreateApplicationRequest'
- *     responses:
- *       200:
- *         description: Application created successfully
- *         content:
- *           application/json:
- *             schema:
- *               $ref: '#/components/schemas/Application'
- *       403:
- *         description: Only candidates can apply for jobs
- *       409:
- *         description: Candidate already applied to this job
- *       400:
- *         description: Invalid user ID or request data
- *       500:
- *         description: Server error
- */
 
 router.post(
   "/",
@@ -144,21 +116,37 @@ router.post(
   allowRoles(Role.CANDIDATE, Role.ADMIN),
   validate(createApplicationSchema),
   async (req: Request, res: Response) => {
-    const { jobId, status } = req.body;
+    const { jobId, status, name, email, cv_url } = req.body;
 
     if (req.role === "RECRUITER") {
       return res
         .status(403)
         .json({ message: "Only candidate can apply job applicants" });
     }
-    const uid =
-      typeof req.user_id === "string" ? parseInt(req.user_id) : req.user_id;
+    const uid = req.user_id;
+    if (!uid) {
+      return res.status(401).json({
+        message: "Unauthorized",
+      });
+    }
 
     try {
+      const existingUser = await prisma.user.findUnique({
+        where: { id: uid },
+        select: { id: true, role: true },
+      });
+
+      if (!existingUser) {
+        return res.status(401).json({
+          message: "Your session is no longer valid. Please login again.",
+        });
+      }
+
       // ✅ PRE-CHECK
       const existingCandidate = await prisma.application.findFirst({
         where: {
           userId: uid,
+          jobId,
         },
       });
 
@@ -168,81 +156,30 @@ router.post(
         });
       }
 
-      if (typeof uid !== "number" || isNaN(uid)) {
-        return res.status(400).json({ message: "Invalid user id" });
-      }
-
       const candidate = await prisma.application.create({
         data: {
           status,
           jobId,
           userId: uid,
+          name,
+          email,
+          cv_url,
         },
       });
       res.status(200).json(candidate);
-    } catch (error) {
+    } catch (error: any) {
+      if (error?.code === "P2003") {
+        return res.status(400).json({
+          message:
+            "Invalid application relation. Please login again and retry.",
+        });
+      }
+
       console.log(error);
       res.status(500).send("Something went wrong");
     }
   },
 );
-
-/**
- * @swagger
- * components:
- *   schemas:
- *     CreateApplicationRequest:
- *       type: object
- *       required:
- *         - jobId
- *         - status
- *       properties:
- *         jobId:
- *           type: integer
- *           example: 12
- *         status:
- *           type: string
- *           example: APPLIED
- *
- *     Application:
- *       type: object
- *       properties:
- *         id:
- *           type: integer
- *         status:
- *           type: string
- *         jobId:
- *           type: integer
- *         userId:
- *           type: integer
- *         createdAt:
- *           type: string
- *           format: date-time
- *
- *     ApplicationResponse:
- *       type: object
- *       properties:
- *         id:
- *           type: integer
- *         status:
- *           type: string
- *         user:
- *           type: object
- *           properties:
- *             id:
- *               type: integer
- *             email:
- *               type: string
- *             role:
- *               type: string
- *               enum: [ADMIN, RECRUITER, CANDIDATE]
- *             createdAt:
- *               type: string
- *               format: date-time
- *             candidateProfile:
- *               type: object
- *               nullable: true
- */
 
 // router.put(
 //   "/",

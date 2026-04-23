@@ -1,84 +1,35 @@
-import { Request, Response, Router } from "express";
-import { prisma } from "../../../lib/prisma";
-import { validate, validateParams } from "../../validation/validate";
-import { verifyToken } from "../../middlewares/authMiddleware";
+import { Router } from "express";
+import type { Request, Response } from "express";
+import { prisma } from "../../../lib/prisma.js";
+import { validate, validateParams } from "../../validation/validate.js";
+import { verifyToken } from "../../middlewares/authMiddleware.js";
 import {
   createCompanySchema,
   updateCompanySchema,
-} from "../../validation/company.schema";
-import { allowRoles } from "../../middlewares/allowRole";
-import { Role } from "../../../generated/prisma/enums";
+} from "../../validation/company.schema.js";
+import { allowRoles } from "../../middlewares/allowRole.js";
+import { Role } from "../../../generated/prisma/enums.js";
 
 const router = Router();
-/**
- * @swagger
- * /company:
- *   get:
- *     summary: Get company profile
- *     description: Get the company profile owned by the logged-in recruiter.
- *     tags:
- *       - Company
- *     security:
- *       - bearerAuth: []
- *     responses:
- *       200:
- *         description: Company retrieved successfully
- *         content:
- *           application/json:
- *             schema:
- *               type: array
- *               items:
- *                 $ref: '#/components/schemas/Company'
- *       500:
- *         description: Server error
- */
 
-router.get("/", async (req: Request, res: Response) => {
-  try {
-    const company = await prisma.company.findMany({
-      where: {
-        ownerId: req.user_id,
-      },
-    });
-    res.status(200).json(company);
-  } catch (error) {
-    console.log(error);
-    res.status(500).send("Something went wrong");
-  }
-});
-
-/**
- * @swagger
- * /company:
- *   post:
- *     summary: Create company profile
- *     description: >
- *       Create a company profile.
- *       Only users with RECRUITER or ADMIN role can create a company.
- *     tags:
- *       - Company
- *     security:
- *       - bearerAuth: []
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             $ref: '#/components/schemas/CreateCompanyRequest'
- *     responses:
- *       200:
- *         description: Company created successfully
- *         content:
- *           application/json:
- *             schema:
- *               $ref: '#/components/schemas/Company'
- *       403:
- *         description: Only recruiters can create company profile
- *       409:
- *         description: Company profile already exists
- *       500:
- *         description: Server error
- */
+router.get(
+  "/",
+  verifyToken,
+  allowRoles(Role.RECRUITER, Role.ADMIN),
+  async (req: Request, res: Response) => {
+    try {
+      const company = await prisma.company.findMany({
+        where: {
+          ownerId: req.user_id || "",
+        },
+      });
+      res.status(200).json(company);
+    } catch (error) {
+      console.log(error);
+      res.status(500).send("Something went wrong");
+    }
+  },
+);
 
 router.post(
   "/",
@@ -87,14 +38,17 @@ router.post(
   validate(createCompanySchema),
   async (req: Request, res: Response) => {
     const data = req.body;
+    console.log(data);
 
     if (req.role === "CANDIDATE") {
       return res
         .status(403)
         .json({ message: "Only recruiters can create company profile" });
     }
-    const uid =
-      typeof req.user_id === "string" ? parseInt(req.user_id) : req.user_id;
+    const uid = req.user_id;
+    if (!uid) {
+      return res.status(401).json({ message: "Unauthorized" });
+    }
 
     try {
       // ✅ PRE-CHECK
@@ -117,41 +71,10 @@ router.post(
       res.status(200).json(company);
     } catch (error) {
       console.log(error);
-      res.status(500).send("Something went wrong");
+      res.status(500).send(error);
     }
   },
 );
-
-/**
- * @swagger
- * /company:
- *   put:
- *     summary: Update company profile
- *     description: >
- *       Update the logged-in recruiter's company profile.
- *       Only RECRUITER or ADMIN roles are allowed.
- *     tags:
- *       - Company
- *     security:
- *       - bearerAuth: []
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             $ref: '#/components/schemas/UpdateCompanyRequest'
- *     responses:
- *       201:
- *         description: Company updated successfully
- *         content:
- *           application/json:
- *             schema:
- *               $ref: '#/components/schemas/Company'
- *       409:
- *         description: Company profile not found
- *       500:
- *         description: Server error
- */
 
 router.put(
   "/",
@@ -160,10 +83,15 @@ router.put(
   validate(updateCompanySchema),
   async (req: Request, res: Response) => {
     const data = req.body;
+    const uid = req.user_id;
+
+    if (!uid) {
+      return res.status(401).json({ message: "Unauthorized" });
+    }
 
     try {
       const existingCompany = await prisma.company.findUnique({
-        where: { ownerId: req.user_id },
+        where: { ownerId: uid },
       });
 
       if (!existingCompany) {
@@ -188,25 +116,6 @@ router.put(
   },
 );
 
-/**
- * @swagger
- * /company:
- *   delete:
- *     summary: Delete company profile
- *     description: Delete the logged-in recruiter's company profile.
- *     tags:
- *       - Company
- *     security:
- *       - bearerAuth: []
- *     responses:
- *       201:
- *         description: Company deleted successfully
- *       409:
- *         description: Company profile not found
- *       500:
- *         description: Server error
- */
-
 router.delete(
   "/",
   verifyToken,
@@ -214,7 +123,7 @@ router.delete(
   async (req: Request, res: Response) => {
     try {
       const existingCompany = await prisma.company.findUnique({
-        where: { ownerId: req.user_id },
+        where: { ownerId: req.user_id || "" },
       });
 
       if (!existingCompany) {
@@ -245,55 +154,3 @@ router.delete(
 );
 
 export default router;
-
-/**
- * @swagger
- * components:
- *   schemas:
- *     Company:
- *       type: object
- *       properties:
- *         id:
- *           type: number
- *           example: 1
- *         name:
- *           type: string
- *           example: OpenAI
- *         description:
- *           type: string
- *           example: AI research company
- *         website:
- *           type: string
- *           example: https://openai.com
- *         location:
- *           type: string
- *           example: San Francisco, USA
- *         ownerId:
- *           type: number
- *           example: 10
- *         createdAt:
- *           type: string
- *           format: date-time
- *
- *     CreateCompanyRequest:
- *       type: object
- *       required:
- *         - name
- *       properties:
- *         name:
- *           type: string
- *           example: OpenAI
- *         description:
- *           type: string
- *           example: AI research company
- *         website:
- *           type: string
- *           example: https://openai.com
- *         location:
- *           type: string
- *           example: San Francisco
- *
- *     UpdateCompanyRequest:
- *       allOf:
- *         - $ref: '#/components/schemas/CreateCompanyRequest'
- */

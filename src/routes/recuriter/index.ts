@@ -1,4 +1,5 @@
-import { Request, Response, Router } from "express";
+import { Router } from "express";
+import type { Request, Response } from "express";
 import { prisma } from "../../../lib/prisma";
 import { validate } from "../../validation/validate";
 import { verifyToken } from "../../middlewares/authMiddleware";
@@ -11,76 +12,26 @@ import { Role } from "../../../generated/prisma/enums";
 
 const router = Router();
 
-/**
- * @swagger
- * /recruiter:
- *   get:
- *     summary: Get recruiter profile
- *     description: Get the recruiter profile of the logged-in user.
- *     tags:
- *       - Recruiter
- *     security:
- *       - bearerAuth: []
- *     responses:
- *       200:
- *         description: Recruiter profile retrieved successfully
- *         content:
- *           application/json:
- *             schema:
- *               type: array
- *               items:
- *                 $ref: '#/components/schemas/RecruiterProfile'
- *       500:
- *         description: Server error
- */
-
-router.get("/", async (req: Request, res: Response) => {
-  try {
-    const recuriter = await prisma.recruiterProfile.findMany({
-      where: {
-        userId: req.user_id,
-      },
-    });
-    res.status(200).json(recuriter);
-  } catch (error) {
-    console.log(error);
-    res.status(500).send("Something went wrong");
-  }
-});
-
-/**
- * @swagger
- * /recruiter:
- *   post:
- *     summary: Create recruiter profile
- *     description: >
- *       Create a recruiter profile.
- *       Only users with RECRUITER or ADMIN role can create a recruiter profile.
- *       A company profile must exist first.
- *     tags:
- *       - Recruiter
- *     security:
- *       - bearerAuth: []
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             $ref: '#/components/schemas/CreateRecruiterRequest'
- *     responses:
- *       200:
- *         description: Recruiter profile created successfully
- *         content:
- *           application/json:
- *             schema:
- *               $ref: '#/components/schemas/RecruiterProfile'
- *       403:
- *         description: Only recruiters can create recruiter profile
- *       409:
- *         description: Company profile missing or recruiter profile already exists
- *       500:
- *         description: Server error
- */
+router.get(
+  "/",
+  verifyToken,
+  allowRoles(Role.RECRUITER, Role.ADMIN),
+  async (req: Request, res: Response) => {
+    try {
+      console.log(req.user_id, "user_id");
+      const recuriter = await prisma.recruiterProfile.findMany({
+        where: {
+          userId: req.user_id || "",
+        },
+      });
+      console.log(recuriter);
+      res.status(200).json(recuriter);
+    } catch (error) {
+      console.log(error);
+      res.status(500).send("Something went wrong");
+    }
+  },
+);
 
 router.post(
   "/",
@@ -95,8 +46,10 @@ router.post(
         .status(403)
         .json({ message: "Only recruiters can create recruiter profile" });
     }
-    const uid =
-      typeof req.user_id === "string" ? parseInt(req.user_id) : req.user_id;
+    const uid = req.user_id;
+    if (!uid) {
+      return res.status(401).json({ message: "Unauthorized" });
+    }
 
     try {
       // ✅ PRE-CHECK
@@ -137,35 +90,6 @@ router.post(
   },
 );
 
-/**
- * @swagger
- * /recruiter:
- *   put:
- *     summary: Update recruiter profile
- *     description: Update the logged-in recruiter's profile.
- *     tags:
- *       - Recruiter
- *     security:
- *       - bearerAuth: []
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             $ref: '#/components/schemas/UpdateRecruiterRequest'
- *     responses:
- *       201:
- *         description: Recruiter profile updated successfully
- *         content:
- *           application/json:
- *             schema:
- *               $ref: '#/components/schemas/RecruiterProfile'
- *       409:
- *         description: Recruiter profile not found
- *       500:
- *         description: Server error
- */
-
 router.put(
   "/",
   verifyToken,
@@ -173,10 +97,15 @@ router.put(
   validate(updateRecuriterSchema),
   async (req: Request, res: Response) => {
     const data = req.body;
+    const uid = req.user_id;
+
+    if (!uid) {
+      return res.status(401).json({ message: "Unauthorized" });
+    }
 
     try {
       const existingRecuriter = await prisma.recruiterProfile.findUnique({
-        where: { userId: req.user_id },
+        where: { userId: uid },
       });
 
       if (!existingRecuriter) {
@@ -226,59 +155,3 @@ router.put(
 // });
 
 export default router;
-
-/**
- * @swagger
- * components:
- *   schemas:
- *     RecruiterProfile:
- *       type: object
- *       properties:
- *         id:
- *           type: number
- *           example: 1
- *         fullName:
- *           type: string
- *           example: John Doe
- *         title:
- *           type: string
- *           example: Senior Recruiter
- *         email:
- *           type: string
- *           example: recruiter@company.com
- *         phone:
- *           type: string
- *           example: "+1 234 567 890"
- *         linkedinUrl:
- *           type: string
- *           example: https://linkedin.com/in/johndoe
- *         userId:
- *           type: number
- *         companyId:
- *           type: number
- *         createdAt:
- *           type: string
- *           format: date-time
- *
- *     CreateRecruiterRequest:
- *       type: object
- *       required:
- *         - fullName
- *         - title
- *         - email
- *       properties:
- *         fullName:
- *           type: string
- *         title:
- *           type: string
- *         email:
- *           type: string
- *         phone:
- *           type: string
- *         linkedinUrl:
- *           type: string
- *
- *     UpdateRecruiterRequest:
- *       allOf:
- *         - $ref: '#/components/schemas/CreateRecruiterRequest'
- */

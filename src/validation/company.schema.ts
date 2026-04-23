@@ -44,5 +44,5 @@ export const updateCompanySchema = createCompanySchema.partial();
  * Params validation (id)
  */
 export const companyIdSchema = z.object({
-  id: z.coerce.number().int().positive(),
+  id: z.uuid(),
 });
