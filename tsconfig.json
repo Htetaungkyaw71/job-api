@@ -99,6 +99,6 @@
     "moduleDetection": "force",
     "skipLibCheck": true
   },
-  "include": ["src", "lib", "generated"],
+  "include": ["src", "lib", "generated", "script.ts", "scriptDel.ts"],
   "exclude": ["node_modules", "dist"]
 }

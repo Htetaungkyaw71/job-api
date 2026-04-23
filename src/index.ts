@@ -12,6 +12,7 @@ import uploadRouter from "./routes/uploads/index.js";
 
 const app = express();
 const PORT = 3000;
+app.set("trust proxy", 1);
 const apiLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   limit: 1000,
