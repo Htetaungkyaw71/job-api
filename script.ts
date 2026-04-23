@@ -7,7 +7,7 @@ import {
   JobLevel,
   JobType,
   Role,
-} from "./generated/prisma/enums.js";
+} from "@prisma/client";
 
 type ScrapedJob = {
   title?: string;

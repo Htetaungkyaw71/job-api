@@ -5,7 +5,7 @@ import { v2 as cloudinary } from "cloudinary";
 import streamifier from "streamifier";
 import { verifyToken } from "../../middlewares/authMiddleware.js";
 import { allowRoles } from "../../middlewares/allowRole.js";
-import { Role } from "../../../generated/prisma/enums.js";
+import { Role } from "@prisma/client";
 
 const router = Router();
 const upload = multer({ storage: multer.memoryStorage() });

@@ -8,7 +8,7 @@ import {
   updateRecuriterSchema,
 } from "../../validation/recuriter.schema.js";
 import { allowRoles } from "../../middlewares/allowRole.js";
-import { Role } from "../../../generated/prisma/enums.js";
+import { Role } from "@prisma/client";
 
 const router = Router();
 

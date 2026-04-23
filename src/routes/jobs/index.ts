@@ -1,6 +1,5 @@
 import type { Request, Response } from "express";
 import { Router } from "express";
-import { prisma } from "../../../lib/prisma.js";
 import { validate, validateParams } from "../../validation/validate.js";
 import {
   createJobSchema,
@@ -9,8 +8,9 @@ import {
 } from "../../validation/job.schema.js";
 import { verifyToken } from "../../middlewares/authMiddleware.js";
 import { allowRoles } from "../../middlewares/allowRole.js";
-import { Role } from "../../../generated/prisma/enums.js";
-import { JobLevel, JobType } from "../../../generated/prisma/enums.js";
+import { Role } from "@prisma/client";
+import { JobLevel, JobType } from "@prisma/client";
+import { prisma } from "../../../lib/prisma.js";
 
 const router = Router();
 
