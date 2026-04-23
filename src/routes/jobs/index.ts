@@ -36,7 +36,7 @@ async function purgeExpiredJobs() {
     return;
   }
 
-  const expiredJobIds = expiredJobs.map((job) => job.id);
+  const expiredJobIds = expiredJobs.map((job: { id: string }) => job.id);
 
   await prisma.$transaction([
     prisma.application.deleteMany({

@@ -5,7 +5,8 @@
   "main": "index.js",
   "scripts": {
     "dev": "node --import=tsx --watch --env-file=.env src/index.ts",
-    "build": "tsc",
+    "build": "prisma generate && tsc",
+    "postinstall": "prisma generate",
     "test": "echo \"Error: no test specified\" && exit 1",
     "del": "node --import=tsx --env-file=.env scriptDel.ts",
     "create": "node --import=tsx --env-file=.env script.ts"
