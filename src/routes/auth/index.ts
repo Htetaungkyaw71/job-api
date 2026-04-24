@@ -19,11 +19,12 @@ const authLimiter = rateLimit({
   message: { message: "Too many auth attempts, please try again later." },
 });
 
-const isSecureCookie = process.env.COOKIE_SECURE === "true";
-const sameSiteCookie: "none" | "lax" = isSecureCookie ? "none" : "lax";
+const isProduction =
+  process.env.NODE_ENV === "production" || process.env.COOKIE_SECURE === "true";
+const sameSiteCookie: "none" | "lax" = isProduction ? "none" : "lax";
 const authCookieOptions = {
   httpOnly: true,
-  secure: isSecureCookie,
+  secure: isProduction,
   sameSite: sameSiteCookie,
   maxAge: 30 * 24 * 60 * 60 * 1000,
   path: "/",
