@@ -29,8 +29,8 @@ export const createJobSchema = z.object({
   description: z.string().min(5, "Description must be at least 5 characters"),
   location: z.string(),
 
-  salaryMin: priceSchema,
-  salaryMax: priceSchema,
+  salaryMin: priceSchema.optional(),
+  salaryMax: priceSchema.optional(),
   techStack: z.array(z.string()),
   isRemote: z.boolean(),
   externalJob: z.boolean().optional(),
