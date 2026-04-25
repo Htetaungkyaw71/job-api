@@ -69,6 +69,7 @@ model User {
   email     String   @unique
   password  String
   role      Role     @default(CANDIDATE)
+  isEmailVerified Boolean @default(false)
   createdAt DateTime @default(now())
 
   candidateProfile CandidateProfile?
@@ -77,6 +78,32 @@ model User {
 
   jobsPosted       Job[]          @relation("PostedJobs")
   applications     Application[]
+  verificationTokens VerificationToken[]
+}
+
+/* =========================
+   VERIFICATION & OTP
+========================= */
+
+model VerificationToken {
+  id        String   @id @default(uuid())
+  email     String
+  code      String   @unique
+  type      VerificationType
+  isUsed    Boolean @default(false)
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  userId String?
+  user   User? @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([email])
+  @@index([code])
+}
+
+enum VerificationType {
+  SIGNUP_VERIFICATION
+  PASSWORD_RESET
 }
 
 /* =========================
@@ -85,6 +112,7 @@ model User {
 
 model CandidateProfile {
   id          String   @id @default(uuid())
+  fullName    String
   headline    String?
   description String?
 
@@ -103,6 +131,8 @@ model CandidateProfile {
 
   userId String  @unique
   user   User @relation(fields: [userId], references: [id])
+
+  cvUrl String?
 
   skills      Skill[]
   languages   Language[]

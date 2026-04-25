@@ -85,9 +85,25 @@ export const experienceSchema = z
     endDate: z.string().datetime().optional(),
     isCurrent: z.boolean().optional(),
   })
-  .refine((data) => !(data.isCurrent && data.endDate), {
-    message: "Current job should not have endDate",
-    path: ["endDate"],
+  .superRefine((data, ctx) => {
+    if (data.isCurrent && data.endDate) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["endDate"],
+        message: "Current job should not have endDate",
+      });
+    }
+
+    if (
+      data.endDate &&
+      new Date(data.startDate).getTime() > new Date(data.endDate).getTime()
+    ) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["startDate"],
+        message: "Start date must be earlier than end date",
+      });
+    }
   });
 
 export const createCandidateSchema = z.object({

@@ -21,7 +21,7 @@ const apiLimiter = rateLimit({
 });
 const allowedOrigins = (
   process.env.CORS_ORIGIN ||
-  "http://localhost:8080,http://127.0.0.1:8080,http://localhost:5173,http://127.0.0.1:5173,https://stackhirejobs.vercel.app"
+  "http://localhost:8081,http://127.0.0.1:8080,http://localhost:5173,http://127.0.0.1:5173,https://stackhirejobs.vercel.app"
 )
   .split(",")
   .map((origin) => origin.trim())

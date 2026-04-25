@@ -51,8 +51,8 @@ async function main() {
   oneMonthLater.setDate(oneMonthLater.getDate() + 30);
 
   // Reset job-related data before import.
-  await prisma.application.deleteMany();
-  await prisma.job.deleteMany();
+  // await prisma.application.deleteMany();
+  // await prisma.job.deleteMany();
 
   const hashedPassword = await bcrypt.hash("password123", 10);
 

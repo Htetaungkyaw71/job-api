@@ -71,3 +71,31 @@ export const updateJobSchema = createJobSchema.partial();
 export const jobIdSchema = z.object({
   id: z.uuid(),
 });
+
+/**
+ * OTP and Authentication Schemas
+ */
+export const registerInitialSchema = z.object({
+  email: z.email(),
+  password: z.string().min(6, "password must be at least 6 characters"),
+  role: z.enum(["RECRUITER", "CANDIDATE"]),
+});
+
+export const verifyOTPSchema = z.object({
+  email: z.email(),
+  code: z.string().length(6, "OTP must be 6 digits"),
+});
+
+export const resendOTPSchema = z.object({
+  email: z.email(),
+});
+
+export const forgotPasswordSchema = z.object({
+  email: z.email(),
+});
+
+export const resetPasswordSchema = z.object({
+  email: z.email(),
+  code: z.string().length(6, "Reset code must be 6 digits"),
+  newPassword: z.string().min(6, "password must be at least 6 characters"),
+});
