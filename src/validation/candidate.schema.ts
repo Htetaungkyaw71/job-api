@@ -107,8 +107,11 @@ export const experienceSchema = z
   });
 
 export const createCandidateSchema = z.object({
+  fullName: z.string().min(1, "Full name is required"),
   headline: z.string().min(3).optional(),
   description: z.string().min(10).optional(),
+  cvUrl: z.url().optional(),
+  cvFilename: z.string().optional(),
 
   location: z.string().optional(),
   openToRemote: z.boolean().optional(),

@@ -72,7 +72,6 @@ router.post(
         return;
       }
       const isValidPasswod = await bcrypt.compare(password, user.password);
-      console.log(isValidPasswod, "aa", password, user.password);
 
       if (!isValidPasswod) {
         res.status(401).send("password is wrong");

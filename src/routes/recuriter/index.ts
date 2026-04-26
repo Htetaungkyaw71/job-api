@@ -18,7 +18,6 @@ router.get(
   allowRoles(Role.RECRUITER, Role.ADMIN),
   async (req: Request, res: Response) => {
     try {
-      console.log(req.user_id, "user_id");
       const recuriter = await prisma.recruiterProfile.findMany({
         where: {
           userId: req.user_id || "",

@@ -8,8 +8,7 @@ import {
 } from "../../validation/job.schema.js";
 import { verifyToken } from "../../middlewares/authMiddleware.js";
 import { allowRoles } from "../../middlewares/allowRole.js";
-import { Role } from "@prisma/client";
-import { JobLevel, JobType } from "@prisma/client";
+import { JobLevel, JobType, Prisma, Role } from "@prisma/client";
 import { prisma } from "../../../lib/prisma.js";
 
 const router = Router();
@@ -129,9 +128,13 @@ router.get("/", async (req: Request, res: Response) => {
     }
 
     const orderBy =
-      sort === "salary"
-        ? { salaryMax: "desc" as const }
-        : { createdAt: "desc" as const };
+      sort === "oldest"
+        ? { createdAt: "asc" as const }
+        : sort === "salary-high"
+          ? { salaryMax: "desc" as const }
+          : sort === "salary-low"
+            ? { salaryMin: "asc" as const }
+            : { createdAt: "desc" as const };
 
     const hasPaginationQuery =
       req.query.page !== undefined || req.query.limit !== undefined;
@@ -212,7 +215,6 @@ router.get(
   validateParams(jobIdSchema),
   async (req: Request, res: Response) => {
     const id = String(req.params.id);
-    console.log(id);
     try {
       await purgeExpiredJobs();
 
@@ -250,7 +252,6 @@ router.post(
     if (!uid) {
       return res.status(401).json({ message: "Unauthorized" });
     }
-    console.log("uid", uid);
 
     // 2. Get recruiter profile + company
     const recruiter = await prisma.recruiterProfile.findUnique({
@@ -260,7 +261,6 @@ router.post(
       select: { companyId: true },
     });
 
-    console.log(recruiter);
     try {
       const job = await prisma.job.create({
         data: {
@@ -383,14 +383,37 @@ router.delete(
         });
       }
 
-      await prisma.job.delete({
-        where: { id: job?.id },
-      });
+      await prisma.$transaction([
+        prisma.application.deleteMany({
+          where: { jobId: job.id },
+        }),
+        prisma.job.delete({
+          where: { id: job.id },
+        }),
+      ]);
 
       res.status(204).send(); // best practice
-    } catch (error) {
-      console.log(error);
-      res.status(500).send("Something went wrong");
+    } catch (error: unknown) {
+      console.error("Failed to delete job", {
+        jobId,
+        userId: uid,
+        role: req.role,
+        error,
+      });
+
+      if (error instanceof Prisma.PrismaClientKnownRequestError) {
+        return res.status(400).json({
+          message: `Delete job failed (${error.code})`,
+        });
+      }
+
+      if (error instanceof Error) {
+        return res.status(500).json({
+          message: error.message,
+        });
+      }
+
+      res.status(500).json({ message: "Something went wrong" });
     }
   },
 );

@@ -59,7 +59,6 @@ router.get(
       return res.status(400).json({ message: "Job id is required" });
     }
 
-    console.log("jonId", jobId);
     try {
       if (req.role === "CANDIDATE") {
         return res.status(403).json({

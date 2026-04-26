@@ -38,7 +38,6 @@ router.post(
   validate(createCompanySchema),
   async (req: Request, res: Response) => {
     const data = req.body;
-    console.log(data);
 
     if (req.role === "CANDIDATE") {
       return res
