@@ -8,7 +8,8 @@ import {
 } from "../../validation/job.schema.js";
 import { verifyToken } from "../../middlewares/authMiddleware.js";
 import { allowRoles } from "../../middlewares/allowRole.js";
-import { JobLevel, JobType, Prisma, Role } from "@prisma/client";
+import { Role } from "@prisma/client";
+import { JobLevel, JobType } from "@prisma/client";
 import { prisma } from "../../../lib/prisma.js";
 
 const router = Router();
@@ -57,8 +58,6 @@ async function purgeExpiredJobs() {
 
 router.get("/", async (req: Request, res: Response) => {
   try {
-    await purgeExpiredJobs();
-
     const firstQueryValue = (
       value: string | string[] | undefined,
     ): string | undefined => (Array.isArray(value) ? value[0] : value);
@@ -97,35 +96,49 @@ router.get("/", async (req: Request, res: Response) => {
       .map((value) => value.trim())
       .filter(Boolean);
 
-    const normalizedTechValues = techValues.map((value) => value.toLowerCase());
-
-    const where: any = {};
+    const whereConditions: any[] = [
+      {
+        OR: [{ expiresAt: null }, { expiresAt: { gte: new Date() } }],
+      },
+    ];
 
     if (type && Object.values(JobType).includes(type as JobType)) {
-      where.type = type;
+      whereConditions.push({ type });
     }
 
     if (level && Object.values(JobLevel).includes(level as JobLevel)) {
-      where.level = level;
+      whereConditions.push({ level });
     }
 
     if (isRemoteStr === "true" || isRemoteStr === "false") {
-      where.isRemote = isRemoteStr === "true";
+      whereConditions.push({ isRemote: isRemoteStr === "true" });
     }
 
     if (!isNaN(minSalaryValue) && minSalaryValue >= 0) {
       // Only include jobs whose minimum salary meets the requested threshold.
-      where.salaryMin = { gte: minSalaryValue };
+      whereConditions.push({ salaryMin: { gte: minSalaryValue } });
+    }
+
+    if (techValues.length > 0) {
+      whereConditions.push({
+        techStack: {
+          hasSome: techValues,
+        },
+      });
     }
 
     if (search.trim()) {
-      where.OR = [
-        { title: { contains: search, mode: "insensitive" } },
-        { location: { contains: search, mode: "insensitive" } },
-        { description: { contains: search, mode: "insensitive" } },
-        { company: { name: { contains: search, mode: "insensitive" } } },
-      ];
+      whereConditions.push({
+        OR: [
+          { title: { contains: search, mode: "insensitive" } },
+          { location: { contains: search, mode: "insensitive" } },
+          { description: { contains: search, mode: "insensitive" } },
+          { company: { name: { contains: search, mode: "insensitive" } } },
+        ],
+      });
     }
+
+    const where: any = { AND: whereConditions };
 
     const orderBy =
       sort === "oldest"
@@ -138,21 +151,6 @@ router.get("/", async (req: Request, res: Response) => {
 
     const hasPaginationQuery =
       req.query.page !== undefined || req.query.limit !== undefined;
-
-    const matchesTechStack = (jobTechStack: string[] | undefined) => {
-      if (normalizedTechValues.length === 0) return true;
-
-      const jobTechValues = (jobTechStack || []).map((value) =>
-        value.toLowerCase(),
-      );
-
-      return normalizedTechValues.some((techValue) =>
-        jobTechValues.some((jobTechValue) => jobTechValue === techValue),
-      );
-    };
-
-    const applyTechFilter = <T extends { techStack: string[] }>(jobs: T[]) =>
-      jobs.filter((job) => matchesTechStack(job.techStack));
 
     if (!hasPaginationQuery) {
       const jobs = await prisma.job.findMany({
@@ -170,28 +168,30 @@ router.get("/", async (req: Request, res: Response) => {
         },
       });
 
-      return res.status(200).json(applyTechFilter(jobs));
+      return res.status(200).json(jobs);
     }
 
-    const jobs = await prisma.job.findMany({
-      where,
-      orderBy,
-      include: {
-        company: {
-          select: {
-            name: true,
-            location: true,
-            website: true,
-            industry: true,
+    const [total, paginatedJobs] = await prisma.$transaction([
+      prisma.job.count({ where }),
+      prisma.job.findMany({
+        where,
+        orderBy,
+        skip,
+        take: limit,
+        include: {
+          company: {
+            select: {
+              name: true,
+              location: true,
+              website: true,
+              industry: true,
+            },
           },
         },
-      },
-    });
+      }),
+    ]);
 
-    const filteredJobs = applyTechFilter(jobs);
-    const total = filteredJobs.length;
     const totalPages = Math.max(1, Math.ceil(total / limit));
-    const paginatedJobs = filteredJobs.slice(skip, skip + limit);
 
     return res.status(200).json({
       data: paginatedJobs,
@@ -216,8 +216,6 @@ router.get(
   async (req: Request, res: Response) => {
     const id = String(req.params.id);
     try {
-      await purgeExpiredJobs();
-
       const jobDetail = await prisma.job.findFirst({
         where: {
           id: id,
@@ -383,37 +381,14 @@ router.delete(
         });
       }
 
-      await prisma.$transaction([
-        prisma.application.deleteMany({
-          where: { jobId: job.id },
-        }),
-        prisma.job.delete({
-          where: { id: job.id },
-        }),
-      ]);
-
-      res.status(204).send(); // best practice
-    } catch (error: unknown) {
-      console.error("Failed to delete job", {
-        jobId,
-        userId: uid,
-        role: req.role,
-        error,
+      await prisma.job.delete({
+        where: { id: job?.id },
       });
 
-      if (error instanceof Prisma.PrismaClientKnownRequestError) {
-        return res.status(400).json({
-          message: `Delete job failed (${error.code})`,
-        });
-      }
-
-      if (error instanceof Error) {
-        return res.status(500).json({
-          message: error.message,
-        });
-      }
-
-      res.status(500).json({ message: "Something went wrong" });
+      res.status(204).send(); // best practice
+    } catch (error) {
+      console.log(error);
+      res.status(500).send("Something went wrong");
     }
   },
 );

@@ -71,3 +71,50 @@ export async function sendPasswordResetEmail(email: string, otpCode: string) {
     throw error;
   }
 }
+
+const applicationStatusLabelMap: Record<string, string> = {
+  APPLIED: "Applied",
+  INTERVIEW: "Interview",
+  OFFER: "Offer",
+  REJECTED: "Rejected",
+};
+
+export async function sendApplicationStatusEmail(
+  email: string,
+  candidateName: string,
+  jobTitle: string,
+  status: string,
+) {
+  try {
+    const readableStatus = applicationStatusLabelMap[status] || status;
+
+    const result = await resend.emails.send({
+      from: SENDER_EMAIL,
+      to: email,
+      subject: `Application update for ${jobTitle} - StackHire`,
+      html: `
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+          <h2>Hello ${candidateName}</h2>
+          <p>Your application for <strong>${jobTitle}</strong> has been updated.</p>
+
+          <div style="background-color: #f8f8f8; padding: 20px; border-radius: 8px; margin: 20px 0;">
+            <p style="margin: 0; font-size: 14px; color: #666;">Current status</p>
+            <p style="margin: 8px 0 0; font-size: 28px; font-weight: bold; color: #333;">${readableStatus}</p>
+          </div>
+
+          <p style="color: #666; font-size: 14px;">Log in to StackHire to review the latest update and next steps.</p>
+        </div>
+      `,
+    });
+
+    if (result.error) {
+      console.error("Failed to send application status email:", result.error);
+      throw new Error("Failed to send application status email");
+    }
+
+    return result;
+  } catch (error) {
+    console.error("Application status email error:", error);
+    throw error;
+  }
+}

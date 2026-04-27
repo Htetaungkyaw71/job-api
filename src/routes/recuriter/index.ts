@@ -23,7 +23,7 @@ router.get(
           userId: req.user_id || "",
         },
       });
-      console.log(recuriter);
+
       res.status(200).json(recuriter);
     } catch (error) {
       console.log(error);

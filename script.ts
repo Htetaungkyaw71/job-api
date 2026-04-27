@@ -43,7 +43,7 @@ function normalizeJobType(value?: string): JobType {
 }
 
 async function main() {
-  const jsonPath = new URL("./todays_jobs.json", import.meta.url);
+  const jsonPath = new URL("./today.json", import.meta.url);
   const jsonRaw = await fs.readFile(jsonPath, "utf8");
   const scrapedJobs = JSON.parse(jsonRaw) as ScrapedJob[];
 

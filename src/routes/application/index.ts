@@ -6,10 +6,13 @@ import { verifyToken } from "../../middlewares/authMiddleware.js";
 
 import {
   createApplicationSchema,
+  applicationIdSchema,
   jobIdSchema,
+  updateApplicationStatusSchema,
 } from "../../validation/job.schema.js";
 import { allowRoles } from "../../middlewares/allowRole.js";
-import { Role } from "@prisma/client";
+import { ApplicationStatus, Role } from "@prisma/client";
+import { sendApplicationStatusEmail } from "../../services/emailService.js";
 
 const router = Router();
 
@@ -39,6 +42,79 @@ router.get(
     } catch (error) {
       console.log(error);
       res.status(500).send("Something went wrong");
+    }
+  },
+);
+
+router.get(
+  "/recruiter/summary",
+  verifyToken,
+  allowRoles(Role.RECRUITER, Role.ADMIN),
+  async (req: Request, res: Response) => {
+    try {
+      const jobWhere =
+        req.role === Role.ADMIN
+          ? { externalJob: false }
+          : {
+              postedById: req.user_id || "",
+              externalJob: false,
+            };
+
+      const [totalApplicants, jobsWithOffers] = await Promise.all([
+        prisma.application.count({
+          where: {
+            job: jobWhere,
+          },
+        }),
+        prisma.job.findMany({
+          where: jobWhere,
+          select: {
+            createdAt: true,
+            applications: {
+              where: {
+                status: ApplicationStatus.OFFER,
+              },
+              select: {
+                updatedAt: true,
+              },
+            },
+          },
+        }),
+      ]);
+
+      const fillDurationsInDays = jobsWithOffers.flatMap((job) => {
+        const jobCreatedAt = new Date(job.createdAt).getTime();
+        if (Number.isNaN(jobCreatedAt)) return [];
+
+        return job.applications
+          .map((application) => {
+            const updatedAt = new Date(application.updatedAt).getTime();
+            if (Number.isNaN(updatedAt) || updatedAt < jobCreatedAt) {
+              return null;
+            }
+
+            return (updatedAt - jobCreatedAt) / (1000 * 60 * 60 * 24);
+          })
+          .filter((value): value is number => value !== null);
+      });
+
+      const avgTimeToFillDays =
+        fillDurationsInDays.length > 0
+          ? fillDurationsInDays.reduce((sum, value) => sum + value, 0) /
+            fillDurationsInDays.length
+          : null;
+
+      return res.status(200).json({
+        totalApplicants,
+        avgTimeToFillDays,
+      });
+    } catch (error) {
+      console.error("Failed to build recruiter application summary", {
+        userId: req.user_id,
+        role: req.role,
+        error,
+      });
+      return res.status(500).json({ message: "Something went wrong" });
     }
   },
 );
@@ -103,6 +179,112 @@ router.get(
     } catch (error) {
       console.log(error);
       res.status(500).send("Something went wrong");
+    }
+  },
+);
+
+router.patch(
+  "/:id/status",
+  verifyToken,
+  allowRoles(Role.RECRUITER, Role.ADMIN),
+  validateParams(applicationIdSchema),
+  validate(updateApplicationStatusSchema),
+  async (req: Request, res: Response) => {
+    const applicationId = String(req.params.id);
+    const { status } = req.body as { status: ApplicationStatus };
+
+    try {
+      const application = await prisma.application.findUnique({
+        where: { id: applicationId },
+        include: {
+          job: {
+            select: {
+              id: true,
+              title: true,
+              postedById: true,
+              externalJob: true,
+            },
+          },
+          user: {
+            select: {
+              email: true,
+              candidateProfile: {
+                select: {
+                  fullName: true,
+                },
+              },
+            },
+          },
+        },
+      });
+
+      if (!application) {
+        return res.status(404).json({ message: "Application not found" });
+      }
+
+      if (
+        req.role !== Role.ADMIN &&
+        application.job.postedById !== req.user_id
+      ) {
+        return res.status(403).json({
+          message: "You are not allowed to update this application",
+        });
+      }
+
+      if (application.job.externalJob) {
+        return res.status(400).json({
+          message: "Status changes are only available for internal jobs",
+        });
+      }
+
+      const updatedApplication = await prisma.application.update({
+        where: { id: applicationId },
+        data: { status },
+        include: {
+          job: {
+            include: {
+              company: true,
+            },
+          },
+          user: {
+            include: {
+              candidateProfile: true,
+            },
+          },
+        },
+      });
+
+      // const candidateEmail = application.user?.email || application.email;
+      // const candidateName =
+      //   application.user?.candidateProfile?.fullName ||
+      //   application.name ||
+      //   candidateEmail ||
+      //   "Candidate";
+
+      // if (candidateEmail) {
+      //   try {
+      //     await sendApplicationStatusEmail(
+      //       candidateEmail,
+      //       candidateName,
+      //       application.job.title,
+      //       status,
+      //     );
+      //   } catch (emailError) {
+      //     console.error("Application status email failed", emailError);
+      //   }
+      // }
+
+      return res.status(200).json(updatedApplication);
+    } catch (error) {
+      console.error("Failed to update application status", {
+        applicationId,
+        userId: req.user_id,
+        role: req.role,
+        error,
+      });
+      return res.status(500).json({
+        message: "Something went wrong",
+      });
     }
   },
 );

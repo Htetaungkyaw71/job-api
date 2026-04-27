@@ -60,6 +60,21 @@ export const createApplicationSchema = z.object({
   status: z.enum(["APPLIED", "INTERVIEW", "OFFER", "REJECTED"]).optional(),
 });
 
+export const applicationStatusSchema = z.enum([
+  "APPLIED",
+  "INTERVIEW",
+  "OFFER",
+  "REJECTED",
+]);
+
+export const updateApplicationStatusSchema = z.object({
+  status: applicationStatusSchema,
+});
+
+export const applicationIdSchema = z.object({
+  id: z.uuid(),
+});
+
 /**
  * Update → all fields optional
  */
