@@ -8,8 +8,7 @@ import {
 } from "../../validation/job.schema.js";
 import { verifyToken } from "../../middlewares/authMiddleware.js";
 import { allowRoles } from "../../middlewares/allowRole.js";
-import { Role } from "@prisma/client";
-import { JobLevel, JobType } from "@prisma/client";
+import { JobLevel, JobType, Prisma, Role } from "@prisma/client";
 import { prisma } from "../../../lib/prisma.js";
 
 const router = Router();
@@ -20,41 +19,69 @@ function getDefaultExpiresAt() {
   return new Date(Date.now() + ONE_MONTH_IN_MS);
 }
 
-async function purgeExpiredJobs() {
-  const expiredJobs = await prisma.job.findMany({
-    where: {
-      expiresAt: {
-        lt: new Date(),
-      },
-    },
+// async function purgeExpiredJobs() {
+//   const expiredJobs = await prisma.job.findMany({
+//     where: {
+//       expiresAt: {
+//         lt: new Date(),
+//       },
+//     },
+//     select: {
+//       id: true,
+//     },
+//   });
+
+//   if (expiredJobs.length === 0) {
+//     return;
+//   }
+
+//   const expiredJobIds = expiredJobs.map((job) => job.id);
+
+//   await prisma.$transaction([
+//     prisma.application.deleteMany({
+//       where: {
+//         jobId: {
+//           in: expiredJobIds,
+//         },
+//       },
+//     }),
+//     prisma.job.deleteMany({
+//       where: {
+//         id: {
+//           in: expiredJobIds,
+//         },
+//       },
+//     }),
+//   ]);
+// }
+
+const JOB_LIST_SELECT: Prisma.JobSelect = {
+  id: true,
+  title: true,
+  location: true,
+  isRemote: true,
+  externalJob: true,
+  company_name: true,
+  salary: true,
+  applyLink: true,
+  logo: true,
+  salaryMin: true,
+  salaryMax: true,
+  techStack: true,
+  level: true,
+  type: true,
+  companyId: true,
+  postedById: true,
+  createdAt: true,
+  company: {
     select: {
-      id: true,
+      name: true,
+      location: true,
+      website: true,
+      industry: true,
     },
-  });
-
-  if (expiredJobs.length === 0) {
-    return;
-  }
-
-  const expiredJobIds = expiredJobs.map((job) => job.id);
-
-  await prisma.$transaction([
-    prisma.application.deleteMany({
-      where: {
-        jobId: {
-          in: expiredJobIds,
-        },
-      },
-    }),
-    prisma.job.deleteMany({
-      where: {
-        id: {
-          in: expiredJobIds,
-        },
-      },
-    }),
-  ]);
-}
+  },
+};
 
 router.get("/", async (req: Request, res: Response) => {
   try {
@@ -132,7 +159,7 @@ router.get("/", async (req: Request, res: Response) => {
         OR: [
           { title: { contains: search, mode: "insensitive" } },
           { location: { contains: search, mode: "insensitive" } },
-          { description: { contains: search, mode: "insensitive" } },
+          // { description: { contains: search, mode: "insensitive" } },
           { company: { name: { contains: search, mode: "insensitive" } } },
         ],
       });
@@ -156,38 +183,20 @@ router.get("/", async (req: Request, res: Response) => {
       const jobs = await prisma.job.findMany({
         where,
         orderBy,
-        include: {
-          company: {
-            select: {
-              name: true,
-              location: true,
-              website: true,
-              industry: true,
-            },
-          },
-        },
+        select: JOB_LIST_SELECT,
       });
 
       return res.status(200).json(jobs);
     }
 
-    const [total, paginatedJobs] = await prisma.$transaction([
+    const [total, paginatedJobs] = await Promise.all([
       prisma.job.count({ where }),
       prisma.job.findMany({
         where,
         orderBy,
         skip,
         take: limit,
-        include: {
-          company: {
-            select: {
-              name: true,
-              location: true,
-              website: true,
-              industry: true,
-            },
-          },
-        },
+        select: JOB_LIST_SELECT,
       }),
     ]);
 

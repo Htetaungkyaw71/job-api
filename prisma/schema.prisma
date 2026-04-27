@@ -1,9 +1,3 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
-
-// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
-// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
-
 generator client {
   provider = "prisma-client-js"
 }
@@ -13,93 +7,168 @@ datasource db {
 }
 
 model Job {
-  id          String   @id @default(uuid())
-  title       String
-  description String
-  location    String
-  isRemote    Boolean @default(false)
-  externalJob Boolean @default(false)
+  id           String        @id @default(uuid())
+  title        String
+  description  String
+  location     String
+  isRemote     Boolean       @default(false)
+  salaryMin    Int?
+  salaryMax    Int?
+  techStack    String[]
+  level        JobLevel
+  type         JobType
+  createdAt    DateTime      @default(now())
+  expiresAt    DateTime?
+  companyId    String
+  postedById   String
+  externalJob  Boolean       @default(false)
+  applyLink    String?
+  logo         String?
+  salary       String?
   company_name String?
-  salary String?
-  applyLink   String?
-  logo        String?
-
-  salaryMin Int?
-  salaryMax Int?
-
-  techStack String[]
-  level     JobLevel
-  type      JobType
-
-  createdAt DateTime @default(now())
-  expiresAt DateTime?
-
-  companyId String
-  company   Company @relation(fields: [companyId], references: [id])
-
-  postedById String
-  postedBy   User @relation("PostedJobs", fields: [postedById], references: [id])
   applications Application[]
+  company      Company       @relation(fields: [companyId], references: [id])
+  postedBy     User          @relation("PostedJobs", fields: [postedById], references: [id])
 
+  @@index([expiresAt])
+  @@index([createdAt(sort: Desc)])
+  @@index([level])
+  @@index([type])
+  @@index([salaryMin])
 }
 
-
-
-
-
 model Application {
-  id        String   @id @default(uuid())
+  id        String            @id @default(uuid())
   status    ApplicationStatus @default(APPLIED)
+  createdAt DateTime          @default(now())
+  jobId     String
+  userId    String
   name      String?
   email     String?
   cv_url    String?
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  jobId String
-  job   Job    @relation(fields: [jobId], references: [id], onDelete: Cascade)
-
-  userId String
-  user   User @relation(fields: [userId], references: [id])
+  updatedAt DateTime          @updatedAt
+  job       Job               @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  user      User              @relation(fields: [userId], references: [id])
 
   @@unique([jobId, userId])
 }
 
 model User {
-  id        String   @id @default(uuid())
-  email     String   @unique
-  password  String
-  role      Role     @default(CANDIDATE)
-  isEmailVerified Boolean @default(false)
-  createdAt DateTime @default(now())
-
-  candidateProfile CandidateProfile?
-  recruiterProfile RecruiterProfile?
-  company          Company?
-
-  jobsPosted       Job[]          @relation("PostedJobs")
-  applications     Application[]
+  id                 String              @id @default(uuid())
+  email              String              @unique
+  password           String
+  role               Role                @default(CANDIDATE)
+  createdAt          DateTime            @default(now())
+  isEmailVerified    Boolean             @default(false)
+  applications       Application[]
+  candidateProfile   CandidateProfile?
+  company            Company?
+  jobsPosted         Job[]               @relation("PostedJobs")
+  recruiterProfile   RecruiterProfile?
   verificationTokens VerificationToken[]
 }
 
-/* =========================
-   VERIFICATION & OTP
-========================= */
-
 model VerificationToken {
-  id        String   @id @default(uuid())
+  id        String           @id @default(uuid())
   email     String
-  code      String   @unique
+  code      String           @unique
   type      VerificationType
-  isUsed    Boolean @default(false)
+  isUsed    Boolean          @default(false)
   expiresAt DateTime
-  createdAt DateTime @default(now())
-
-  userId String?
-  user   User? @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt DateTime         @default(now())
+  userId    String?
+  user      User?            @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([email])
   @@index([code])
+}
+
+model CandidateProfile {
+  id             String            @id @default(uuid())
+  headline       String?
+  description    String?
+  location       String?
+  openToRemote   Boolean           @default(true)
+  availability   Availability
+  jobStatus      JobStatus
+  visibility     ProfileVisibility @default(RECRUITERS_ONLY)
+  createdAt      DateTime          @default(now())
+  updatedAt      DateTime          @updatedAt
+  userId         String            @unique
+  expectedSalary Int?
+  cvUrl          String?
+  fullName       String
+  cvFilename     String?
+  user           User              @relation(fields: [userId], references: [id])
+  experiences    Experience[]
+  languages      Language[]
+  skills         Skill[]
+}
+
+model RecruiterProfile {
+  id          String   @id @default(uuid())
+  fullName    String
+  title       String
+  email       String
+  phone       String?
+  linkedinUrl String?
+  createdAt   DateTime @default(now())
+  userId      String   @unique
+  companyId   String
+  company     Company  @relation(fields: [companyId], references: [id])
+  user        User     @relation(fields: [userId], references: [id])
+}
+
+model Skill {
+  id        String           @id @default(uuid())
+  name      String
+  level     SkillLevel
+  profileId String
+  profile   CandidateProfile @relation(fields: [profileId], references: [id])
+}
+
+model Language {
+  id        String           @id @default(uuid())
+  name      String
+  level     LanguageLevel
+  profileId String
+  profile   CandidateProfile @relation(fields: [profileId], references: [id])
+}
+
+model Experience {
+  id          String           @id @default(uuid())
+  companyName String
+  role        String
+  description String?
+  startDate   DateTime
+  endDate     DateTime?
+  isCurrent   Boolean          @default(false)
+  profileId   String
+  profile     CandidateProfile @relation(fields: [profileId], references: [id])
+}
+
+model Company {
+  id           String             @id @default(uuid())
+  name         String
+  description  String
+  website      String?
+  industry     String
+  size         CompanySize
+  foundedYear  Int?
+  location     String
+  hiringStatus HiringStatus
+  verified     Boolean            @default(false)
+  createdAt    DateTime           @default(now())
+  ownerId      String             @unique
+  owner        User               @relation(fields: [ownerId], references: [id])
+  jobs         Job[]
+  recruiters   RecruiterProfile[]
+}
+
+model playing_with_neon {
+  id    Int    @id @default(autoincrement())
+  name  String
+  value Float? @db.Real
 }
 
 enum VerificationType {
@@ -107,140 +176,11 @@ enum VerificationType {
   PASSWORD_RESET
 }
 
-/* =========================
-   CANDIDATE PROFILE
-========================= */
-
-model CandidateProfile {
-  id          String   @id @default(uuid())
-  fullName    String
-  headline    String?
-  description String?
-
-  location     String?
-  openToRemote Boolean @default(true)
-
-  expectedSalary Int?
-
-  availability Availability
-  jobStatus    JobStatus
-
-  visibility   ProfileVisibility @default(RECRUITERS_ONLY)
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  userId String  @unique
-  user   User @relation(fields: [userId], references: [id])
-
-  cvUrl String?
-  cvFilename String?
-
-  skills      Skill[]
-  languages   Language[]
-  experiences Experience[]
-}
-
-/* =========================
-   RECRUITER PROFILE
-========================= */
-
-model RecruiterProfile {
-  id          String   @id @default(uuid())
-  fullName    String
-  title       String      // HR Manager, Tech Recruiter
-  email       String
-  phone       String?
-  linkedinUrl String?
-
-  createdAt DateTime @default(now())
-
-  userId String  @unique
-  user   User @relation(fields: [userId], references: [id])
-
-  companyId String
-  company   Company @relation(fields: [companyId], references: [id])
-}
-
 enum Role {
   ADMIN
   RECRUITER
   CANDIDATE
 }
-
-
-/* =========================
-   SKILLS
-========================= */
-
-model Skill {
-  id        String     @id @default(uuid())
-  name      String
-  level     SkillLevel
-
-  profileId String
-  profile   CandidateProfile @relation(fields: [profileId], references: [id])
-}
-
-/* =========================
-   LANGUAGES
-========================= */
-
-model Language {
-  id        String        @id @default(uuid())
-  name      String
-  level     LanguageLevel
-
-  profileId String
-  profile   CandidateProfile @relation(fields: [profileId], references: [id])
-}
-
-/* =========================
-   WORK EXPERIENCE
-========================= */
-
-model Experience {
-  id          String   @id @default(uuid())
-  companyName String
-  role        String
-  description String?
-  startDate   DateTime
-  endDate     DateTime?
-  isCurrent   Boolean @default(false)
-
-  profileId String
-  profile   CandidateProfile @relation(fields: [profileId], references: [id])
-}
-
-
-/* =========================
-   COMPANY
-========================= */
-
-model Company {
-  id          String   @id @default(uuid())
-  name        String
-  description String
-  website     String?
-  industry    String
-  size        CompanySize
-  foundedYear Int?
-  location    String
-
-  hiringStatus HiringStatus
-  verified     Boolean @default(false)
-
-  createdAt DateTime @default(now())
-
-  ownerId String   @unique
-  owner   User  @relation(fields: [ownerId], references: [id])
-
-  recruiters RecruiterProfile[]
-  jobs       Job[]
-}
-
-
-
 
 enum Availability {
   IMMEDIATE
@@ -288,7 +228,6 @@ enum HiringStatus {
   LIMITED_HIRING
   NOT_HIRING
 }
-
 
 enum JobLevel {
   JUNIOR
