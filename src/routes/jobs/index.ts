@@ -362,6 +362,52 @@ router.put(
 //   },
 // );
 
+router.get(
+  "/recruiter/mine",
+  verifyToken,
+  allowRoles(Role.RECRUITER, Role.ADMIN),
+  async (req: Request, res: Response) => {
+    try {
+      const page = Math.max(1, Number(req.query.page) || 1);
+      const limit = Math.min(100, Math.max(1, Number(req.query.limit) || 10));
+      const skip = (page - 1) * limit;
+
+      const where: Prisma.JobWhereInput = {
+        postedById: req.user_id || "",
+        OR: [{ expiresAt: null }, { expiresAt: { gte: new Date() } }],
+      };
+
+      const [total, jobs] = await Promise.all([
+        prisma.job.count({ where }),
+        prisma.job.findMany({
+          where,
+          orderBy: { createdAt: "desc" },
+          skip,
+          take: limit,
+          select: JOB_LIST_SELECT,
+        }),
+      ]);
+
+      const totalPages = Math.max(1, Math.ceil(total / limit));
+
+      return res.status(200).json({
+        data: jobs,
+        pagination: {
+          page,
+          limit,
+          total,
+          totalPages,
+          hasNextPage: page < totalPages,
+          hasPrevPage: page > 1,
+        },
+      });
+    } catch (error) {
+      console.log(error);
+      res.status(500).send("Something went wrong");
+    }
+  },
+);
+
 router.delete(
   "/:id",
   verifyToken,
