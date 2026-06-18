@@ -18,12 +18,12 @@ router.get(
   allowRoles(Role.RECRUITER, Role.ADMIN),
   async (req: Request, res: Response) => {
     try {
-      const company = await prisma.company.findMany({
+      const company = await prisma.company.findUnique({
         where: {
           ownerId: req.user_id || "",
         },
       });
-      res.status(200).json(company);
+      res.status(200).json(company ? [company] : []);
     } catch (error) {
       console.log(error);
       res.status(500).send("Something went wrong");

@@ -14,6 +14,7 @@ import { prisma } from "../../../lib/prisma.js";
 const router = Router();
 
 const ONE_MONTH_IN_MS = 30 * 24 * 60 * 60 * 1000;
+const MAX_UNPAGINATED_JOBS = 100;
 
 function getDefaultExpiresAt() {
   return new Date(Date.now() + ONE_MONTH_IN_MS);
@@ -123,18 +124,18 @@ router.get("/", async (req: Request, res: Response) => {
       .map((value) => value.trim())
       .filter(Boolean);
 
-    const whereConditions: any[] = [
+    const whereConditions: Prisma.JobWhereInput[] = [
       {
         OR: [{ expiresAt: null }, { expiresAt: { gte: new Date() } }],
       },
     ];
 
     if (type && Object.values(JobType).includes(type as JobType)) {
-      whereConditions.push({ type });
+      whereConditions.push({ type: type as JobType });
     }
 
     if (level && Object.values(JobLevel).includes(level as JobLevel)) {
-      whereConditions.push({ level });
+      whereConditions.push({ level: level as JobLevel });
     }
 
     if (isRemoteStr === "true" || isRemoteStr === "false") {
@@ -165,7 +166,7 @@ router.get("/", async (req: Request, res: Response) => {
       });
     }
 
-    const where: any = { AND: whereConditions };
+    const where: Prisma.JobWhereInput = { AND: whereConditions };
 
     const orderBy =
       sort === "oldest"
@@ -183,6 +184,7 @@ router.get("/", async (req: Request, res: Response) => {
       const jobs = await prisma.job.findMany({
         where,
         orderBy,
+        take: MAX_UNPAGINATED_JOBS,
         select: JOB_LIST_SELECT,
       });
 

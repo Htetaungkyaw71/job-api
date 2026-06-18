@@ -15,6 +15,8 @@ import { ApplicationStatus, Role } from "@prisma/client";
 import { sendApplicationStatusEmail } from "../../services/emailService.js";
 
 const router = Router();
+const MAX_UNPAGINATED_APPLICATIONS = 100;
+const MAX_UNPAGINATED_JOB_APPLICANTS = 200;
 
 router.get(
   "/me",
@@ -36,6 +38,7 @@ router.get(
         orderBy: {
           createdAt: "desc",
         },
+        take: MAX_UNPAGINATED_APPLICATIONS,
       });
 
       res.status(200).json(applications);
@@ -162,6 +165,10 @@ router.get(
         where: {
           jobId,
         },
+        orderBy: {
+          createdAt: "desc",
+        },
+        take: MAX_UNPAGINATED_JOB_APPLICANTS,
         include: {
           user: {
             select: {

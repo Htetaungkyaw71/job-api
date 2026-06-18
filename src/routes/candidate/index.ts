@@ -16,7 +16,7 @@ const router = Router();
 
 router.get("/", verifyToken, async (req: Request, res: Response) => {
   try {
-    const candidate = await prisma.candidateProfile.findMany({
+    const candidate = await prisma.candidateProfile.findUnique({
       where: {
         userId: req.user_id || "",
       },
@@ -26,7 +26,7 @@ router.get("/", verifyToken, async (req: Request, res: Response) => {
         experiences: true,
       },
     });
-    res.status(200).json(candidate);
+    res.status(200).json(candidate ? [candidate] : []);
   } catch (error) {
     console.log(error);
     res.status(500).send("Something went wrong");

@@ -34,7 +34,11 @@ model Job {
   @@index([createdAt(sort: Desc)])
   @@index([level])
   @@index([type])
+  @@index([postedById, createdAt(sort: Desc)])
+  @@index([companyId])
+  @@index([isRemote])
   @@index([salaryMin])
+  @@index([salaryMax])
 }
 
 model Application {
@@ -51,6 +55,9 @@ model Application {
   user      User              @relation(fields: [userId], references: [id])
 
   @@unique([jobId, userId])
+  @@index([userId, createdAt(sort: Desc)])
+  @@index([jobId, createdAt(sort: Desc)])
+  @@index([status])
 }
 
 model User {
@@ -81,6 +88,7 @@ model VerificationToken {
 
   @@index([email])
   @@index([code])
+  @@index([expiresAt])
 }
 
 model CandidateProfile {
@@ -117,6 +125,8 @@ model RecruiterProfile {
   companyId   String
   company     Company  @relation(fields: [companyId], references: [id])
   user        User     @relation(fields: [userId], references: [id])
+
+  @@index([companyId])
 }
 
 model Skill {
@@ -125,6 +135,8 @@ model Skill {
   level     SkillLevel
   profileId String
   profile   CandidateProfile @relation(fields: [profileId], references: [id])
+
+  @@index([profileId])
 }
 
 model Language {
@@ -133,6 +145,8 @@ model Language {
   level     LanguageLevel
   profileId String
   profile   CandidateProfile @relation(fields: [profileId], references: [id])
+
+  @@index([profileId])
 }
 
 model Experience {
@@ -145,6 +159,8 @@ model Experience {
   isCurrent   Boolean          @default(false)
   profileId   String
   profile     CandidateProfile @relation(fields: [profileId], references: [id])
+
+  @@index([profileId])
 }
 
 model Company {

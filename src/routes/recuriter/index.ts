@@ -18,13 +18,13 @@ router.get(
   allowRoles(Role.RECRUITER, Role.ADMIN),
   async (req: Request, res: Response) => {
     try {
-      const recuriter = await prisma.recruiterProfile.findMany({
+      const recuriter = await prisma.recruiterProfile.findUnique({
         where: {
           userId: req.user_id || "",
         },
       });
 
-      res.status(200).json(recuriter);
+      res.status(200).json(recuriter ? [recuriter] : []);
     } catch (error) {
       console.log(error);
       res.status(500).send("Something went wrong");
